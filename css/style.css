@@ -490,7 +490,8 @@ a.label:hover, .label a:hover { text-decoration: underline; text-underline-offse
 .anukram { padding: calc(34px * var(--sp)) 0 calc(70px * var(--sp)); }
 .anukram .sec-title::after { order: 1; }
 .view-toggle { order: 2; display: flex; border: 1px solid var(--rule); font-family: var(--ui); font-size: 14px; }
-.view-toggle button { padding: 5px 14px; color: var(--ink-2); transition: background .2s; }
+.view-toggle button { padding: 6px 10px; color: var(--ink-2); transition: background .2s; display: grid; place-items: center; }
+.view-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 .view-toggle button + button { border-left: 1px solid var(--rule); }
 .view-toggle button:hover { background: var(--hl); }
 .view-toggle button.on { background: var(--ink); color: var(--paper); }

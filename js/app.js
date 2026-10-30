@@ -591,7 +591,7 @@ async function issuePage(id) {
     ${items.length ? `<section class="anukram">
       <div class="sec-title"><h2>अनुक्रम</h2>
         <div class="view-toggle" role="tablist">
-          <button type="button" data-v="list">यादी</button><button type="button" data-v="cards">कार्ड</button>
+          <button type="button" data-v="list" title="यादी" aria-label="यादी"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"/></svg></button><button type="button" data-v="cards" title="कार्ड" aria-label="कार्ड"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="5.5" height="5.5"/><rect x="11.5" y="3" width="5.5" height="5.5"/><rect x="3" y="11.5" width="5.5" height="5.5"/><rect x="11.5" y="11.5" width="5.5" height="5.5"/></svg></button>
         </div></div>
       <div id="anukramBody"></div>
     </section>` : ''}
