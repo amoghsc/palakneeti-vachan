@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="mr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>पालकनीती</title>
+  <meta name="description" content="पालकनीतीचे लेख, शांतपणे वाचण्यासाठी. थेट palakneeti.in वरून.">
+  <meta name="theme-color" content="#f6f2ea">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Devanagari:wght@200..700&family=Tiro+Devanagari+Marathi:ital@0;1&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Mukta:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='10' fill='%23f6f2ea'/><text x='32' y='45' font-size='36' text-anchor='middle' fill='%237a3e2e' font-family='serif'>प</text></svg>">
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <header class="masthead" id="masthead">
+    <div class="mast">
+      <a class="wordmark" href="#/"><span class="wm-mr">पालकनीती</span></a>
+      <nav class="sections" id="nav">
+        <a href="#/" data-r="home">लेख</a>
+        <a href="#/masik" data-r="masik">मासिक</a>
+        <a href="#/authors" data-r="authors">लेखक</a>
+        <a href="#/topics" data-r="topics">विषय</a>
+        <a href="#/graph" data-r="graph">जाळं</a>
+        <button class="icon-search" id="searchBtn" type="button" aria-label="शोधा" title="शोधा">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+        </button>
+      </nav>
+      <div class="mast-tools">
+        <div class="reader-opts" id="readerOpts" hidden></div>
+        <button class="txt-btn" id="theme" type="button" title="दिवस · पिवळसर · रात्र">◐</button>
+      </div>
+    </div>
+    <div class="search" id="search" hidden>
+      <textarea id="q" rows="1" placeholder="शीर्षक, लेखक किंवा विषय शोधा… किंवा तुमची परिस्थिती लिहा आणि लेख सुचवायला सांगा" autocomplete="off"></textarea>
+      <div class="ai-row">
+        <button class="ai-btn" id="aiBtn" type="button" disabled>✦ माझ्यासाठी लेख सुचवा</button>
+        <span class="ai-hint">AI वापरून. तुम्ही लिहिलेला मजकूर उत्तरासाठी Google च्या AI कडे पाठवला जातो; तो इथे साठवला जात नाही.</span>
+      </div>
+      <div class="ai-results" id="aiResults"></div>
+      <div class="search-results" id="results"></div>
+    </div>
+  </header>
+
+  <main id="view" tabindex="-1">
+    <p class="loading" id="loadMsg">लेख आणत आहोत…</p>
+  </main>
+
+  <footer class="colophon">
+    <p>सर्व लेख <a href="https://palakneeti.in" target="_blank" rel="noopener">palakneeti.in</a> वरून थेट वाचले जातात; इथे त्यांची प्रत ठेवली जात नाही.</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
