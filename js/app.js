@@ -253,10 +253,11 @@ async function article(id, from) {
     if (location.hash.split('?')[0] !== `#/a/${id}`) return;
     if (!a) { $view.innerHTML = `<div class="page-head"><h1>हा लेख सापडला नाही</h1><p><a class="read-link" href="#/">मुखपृष्ठावर परत</a></p></div>`; return; }
     addToPool([a]); rebuild(); lookUpPhotos();
+    a = S.pool.get(id); // another fetch (e.g. AI picks) may have stored its copy first; that one carries .related
   }
   const issue = from && S.issues.get(issueId(from));
   document.title = `${a.title} · पालकनीती`;
-  if (!S.authors.has(a.authorKey)) { addToPool([a]); rebuild(); }
+  if (!S.authors.has(a.authorKey) || !a.related) { addToPool([a]); rebuild(); a = S.pool.get(id); }
   const au = S.authors.get(a.authorKey);
   const others = au.articles.filter(b => b.id !== a.id).slice(0, 4);
   $view.innerHTML = `${from ? crumbs([['मासिक', '#/masik'], [issue ? issue.title : '…', `#/masik/${from}`], [a.title]]) : ''}<article class="article fade-in">
