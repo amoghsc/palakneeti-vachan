@@ -773,13 +773,23 @@ const hashId = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(
 /* ---------- search: Devanagari or English spelling ---------- */
 const $search = $('#search'), $q = $('#q'), $results = $('#results');
 function closeSearch() {
-  $search.hidden = true; $q.value = ''; $results.innerHTML = ''; $('#aiResults').innerHTML = ''; growQ();
-  $('#searchBtn').classList.remove('on');
+  $search.hidden = true; $q.value = ''; $results.innerHTML = ''; $('#aiResults').innerHTML = '';
+  $('#searchBtn').classList.remove('on'); focusResults();
 }
 $('#searchBtn').onclick = () => {
   if (!$search.hidden) return closeSearch();
-  $search.hidden = false; $('#searchBtn').classList.add('on'); $q.focus();
+  $search.hidden = false; $('#searchBtn').classList.add('on'); growQ(); $q.focus();
 };
+// Author (with thumbnail) and date for a search or AI result. 'पालकनीती' is the fallback name, not an author.
+function byline(a) {
+  const au = a.author && a.author !== 'पालकनीती' ? `${portrait(a.authorKey, a.author)}<span>${esc(a.author)}</span><span class="dot">·</span>` : '';
+  return `${au}<span>${mrDate(a.date)}</span>`;
+}
+// While results are showing, the page underneath steps aside so only the list is seen.
+function focusResults() {
+  const on = !$search.hidden && !!($results.innerHTML.trim() || $('#aiResults').innerHTML.trim());
+  document.body.classList.toggle('searching', on);
+}
 
 // Each article's words as consonant skeletons of their Latin spelling, so
 // "paranjape" finds परांजपे and "palakatva" / "palaktva" find पालकत्व.
@@ -806,12 +816,13 @@ function score(a, q) {
 }
 $q.addEventListener('input', () => {
   const q = $q.value.trim().toLowerCase();
-  if (!q) { $results.innerHTML = ''; return; }
+  if (!q) { $results.innerHTML = ''; return focusResults(); }
   const hits = [...S.pool.values()].map(a => [a, score(a, q)]).filter(([, s]) => s)
     .sort((x, y) => y[1] - x[1] || y[0].date - x[0].date).slice(0, 8).map(([a]) => a);
   $results.innerHTML = hits.length
-    ? hits.map(a => `<a href="#/a/${a.id}"><span class="st">${esc(a.title)}</span><small class="who">${portrait(a.authorKey, a.author)}<span>${esc(a.author)}</span></small></a>`).join('')
+    ? hits.map(a => `<a href="#/a/${a.id}"><span class="st">${esc(a.title)}</span><small class="who">${byline(a)}</small></a>`).join('')
     : `<p class="meta">काही सापडलं नाही.</p>`;
+  focusResults();
 });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$search.hidden) closeSearch(); });
 
@@ -824,13 +835,35 @@ const AI_LOCAL = new URLSearchParams(location.search).get('ai') === 'local';
 const AI_URL = AI_LOCAL ? 'http://127.0.0.1:5203/' : 'https://efxadlmhjzlejsacjwkf.supabase.co/functions/v1/pk-suggest';
 const AI_HEADERS = AI_LOCAL ? {} : { authorization: `Bearer ${SUPABASE_ANON}`, apikey: SUPABASE_ANON };
 const $ai = $('#aiResults'), $aiBtn = $('#aiBtn');
-function growQ() { $q.style.height = 'auto'; $q.style.height = Math.min(220, $q.scrollHeight) + 'px'; }
+// Grow with the text; when empty, size to the placeholder so the hint is never clipped.
+function growQ() {
+  $q.style.height = 'auto';
+  let h = $q.scrollHeight;
+  if (!$q.value) {
+    $q.value = $q.placeholder; $q.classList.add('measuring');
+    h = Math.max(h, $q.scrollHeight);
+    $q.value = ''; $q.classList.remove('measuring');
+  }
+  $q.style.height = Math.min(220, h) + ($q.offsetHeight - $q.clientHeight) + 'px'; // border-box: add the rule line
+}
+addEventListener('resize', () => { if (!$search.hidden) growQ(); });
 $q.addEventListener('input', () => { growQ(); $aiBtn.disabled = $q.value.trim().length < 8; });
 $q.addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (!$aiBtn.disabled) askAI(); }
   else if (e.key === 'Enter' && !e.shiftKey && $q.value.length < 60) e.preventDefault(); // short queries stay one line
 });
 $aiBtn.onclick = askAI;
+
+// The AI returns ids and titles only; authors come from the article itself, fetched live.
+function fillPickAuthors(run) {
+  $ai.querySelectorAll('[data-au]').forEach(async el => {
+    const id = +el.dataset.au;
+    const a = S.pool.get(id) || await fetchArticle(id).catch(() => null);
+    if (run !== aiRun || !a) return;
+    if (!S.pool.has(id)) S.pool.set(id, a);
+    el.innerHTML = byline(a);
+  });
+}
 
 let aiRun = 0;
 async function askAI() {
@@ -841,6 +874,7 @@ async function askAI() {
   const steps = ['तुमचं म्हणणं समजून घेत आहोत…', 'पालकनीतीच्या संग्रहात लेख शोधत आहोत…', 'तुमच्यासाठी योग्य लेख निवडत आहोत…'];
   let k = 0;
   $ai.innerHTML = `<p class="ai-wait"><span class="dotty"></span>${steps[0]}</p>`;
+  focusResults();
   const tick = setInterval(() => { const w = $ai.querySelector('.ai-wait'); if (w && k < steps.length - 1) w.lastChild.textContent = steps[++k]; }, 4500);
   $aiBtn.disabled = true;
   try {
@@ -852,9 +886,10 @@ async function askAI() {
       ${out.urgent ? `<p class="ai-urgent">तुम्ही किंवा तुमच्या जवळचं कोणी धोक्यात असल्यास कृपया लगेच मदत घ्या: <b>टेली-मानस हेल्पलाइन १४४१६</b> (२४ तास, विनामूल्य) किंवा आपत्कालीन क्रमांक <b>११२</b>.</p>` : ''}
       ${out.note ? `<p class="ai-note">${esc(out.note)}</p>` : ''}
       ${out.picks && out.picks.length ? `<ol class="ai-picks">${out.picks.map(p => `<li><a href="#/a/${p.id}">
-          <span class="t">${esc(p.title)}</span><span class="r">${esc(p.reason)}</span></a></li>`).join('')}</ol>`
+          <span class="t">${esc(p.title)}</span><small class="who" data-au="${p.id}"></small><span class="r">${esc(p.reason)}</span></a></li>`).join('')}</ol>`
         : '<p class="meta">या वेळी जुळणारे लेख सापडले नाहीत. थोडं वेगळ्या शब्दांत लिहून पाहा.</p>'}
       <p class="ai-foot">हे सुचवलेले लेख AI ने निवडले आहेत; प्रत्येक लेख palakneeti.in वरून थेट वाचला जातो.</p>`;
+    fillPickAuthors(run);
   } catch (err) {
     if (run !== aiRun) return;
     $ai.innerHTML = `<p class="meta">${err.status === 503 && /not-configured/.test(err.message) ? 'ही सुविधा लवकरच सुरू होईल.'
