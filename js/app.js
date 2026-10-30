@@ -256,6 +256,7 @@ async function article(id, from) {
   }
   const issue = from && S.issues.get(issueId(from));
   document.title = `${a.title} · पालकनीती`;
+  if (!S.authors.has(a.authorKey)) { addToPool([a]); rebuild(); }
   const au = S.authors.get(a.authorKey);
   const others = au.articles.filter(b => b.id !== a.id).slice(0, 4);
   $view.innerHTML = `${from ? crumbs([['मासिक', '#/masik'], [issue ? issue.title : '…', `#/masik/${from}`], [a.title]]) : ''}<article class="article fade-in">
@@ -855,14 +856,13 @@ $q.addEventListener('keydown', e => {
 $aiBtn.onclick = askAI;
 
 // The AI returns ids and titles only; authors come from the article itself, fetched live.
-function fillPickAuthors(run) {
-  $ai.querySelectorAll('[data-au]').forEach(async el => {
-    const id = +el.dataset.au;
-    const a = S.pool.get(id) || await fetchArticle(id).catch(() => null);
-    if (run !== aiRun || !a) return;
-    if (!S.pool.has(id)) S.pool.set(id, a);
-    el.innerHTML = byline(a);
-  });
+async function fillPickAuthors(run) {
+  const els = [...$ai.querySelectorAll('[data-au]')];
+  const found = await Promise.all(els.map(el => S.pool.get(+el.dataset.au) || fetchArticle(+el.dataset.au).catch(() => null)));
+  if (run !== aiRun) return;
+  const fresh = found.filter(a => a && !S.pool.has(a.id));
+  if (fresh.length) { addToPool(fresh); rebuild(); } // registers their authors too, so the article pages open
+  els.forEach((el, i) => { if (found[i]) el.innerHTML = byline(found[i]); });
 }
 
 let aiRun = 0;
