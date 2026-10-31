@@ -1,4 +1,5 @@
 import { fetchArticles, fetchArticle, fetchByAuthor, fetchFiltered, fetchGhIssue, fetchGhIssues, fetchIssue, fetchIssues, findPhoto, latin, resolveIssue, skel } from './source.js';
+import { SUPABASE_URL, SUPABASE_ANON, track, trackView, trackSearch } from './track.js';
 import { relate, mr, readMins, mrDate, firstGrapheme } from './text.js';
 import { applyDesign, mountSettings, setReadSize, readSize, READ_SIZES, clearColors } from './settings.js';
 
@@ -824,17 +825,16 @@ $q.addEventListener('input', () => {
   $results.innerHTML = hits.length
     ? hits.map(a => `<a href="#/a/${a.id}"><span class="st">${esc(a.title)}</span><small class="who">${byline(a)}</small></a>`).join('')
     : `<p class="meta">काही सापडलं नाही.</p>`;
+  trackSearch(q, hits.length);
   focusResults();
 });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$search.hidden) closeSearch(); });
 
 /* ---------- AI: articles for the reader's own situation ---------- */
-// The Gemini key stays server-side in the Supabase Edge Function (ai/index.ts). The anon key
-// below is Supabase's public client key, made to be shipped in web pages.
+// The Gemini key stays server-side in the Supabase Edge Function (ai/index.ts).
 // For offline work, run ai/dev-server.mjs and add ?ai=local to the address.
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmeGFkbG1oanpsZWpzYWNqd2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5OTU5NDMsImV4cCI6MjEwMTU3MTk0M30.HDtRJ-QOwxTW0ihtk-17Md4zX9i8oVHp85Uy40fodQM';
 const AI_LOCAL = new URLSearchParams(location.search).get('ai') === 'local';
-const AI_URL = AI_LOCAL ? 'http://127.0.0.1:5203/' : 'https://efxadlmhjzlejsacjwkf.supabase.co/functions/v1/pk-suggest';
+const AI_URL = AI_LOCAL ? 'http://127.0.0.1:5203/' : `${SUPABASE_URL}/functions/v1/pk-suggest`;
 const AI_HEADERS = AI_LOCAL ? {} : { authorization: `Bearer ${SUPABASE_ANON}`, apikey: SUPABASE_ANON };
 const $ai = $('#aiResults'), $aiBtn = $('#aiBtn');
 // Grow with the text; when empty, size to the placeholder so the hint is never clipped.
@@ -882,6 +882,7 @@ async function askAI() {
     const res = await fetch(AI_URL, { method: 'POST', headers: { 'content-type': 'application/json', ...AI_HEADERS }, body: JSON.stringify({ text }) });
     const out = await res.json().catch(() => ({}));
     if (run !== aiRun) return;
+    track('ai', { n: res.ok ? (out.picks || []).length : -1 });
     if (!res.ok) throw Object.assign(new Error(out.error || 'failed'), { status: res.status });
     $ai.innerHTML = `
       ${out.urgent ? `<p class="ai-urgent">तुम्ही किंवा तुमच्या जवळचं कोणी धोक्यात असल्यास कृपया लगेच मदत घ्या: <b>टेली-मानस हेल्पलाइन १४४१६</b> (२४ तास, विनामूल्य) किंवा आपत्कालीन क्रमांक <b>११२</b>.</p>` : ''}
@@ -952,6 +953,7 @@ function route() {
     case 'masik': parts[1] ? issuePage(issueId(parts[1])) : masik(); break;
     default: home();
   }
+  trackView({ a: 'article', masik: parts[1] ? 'issue' : 'masik' }[parts[0]] || parts[0] || 'home', parts[1] || null);
   if (parts[0] !== 'a' && !inTopics) scrollTo(0, 0);
   if (!inTopics) $view.focus({ preventScroll: true });
 }
