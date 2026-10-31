@@ -860,7 +860,8 @@ const matchAuthors = q => (q.length < 2 ? [] : [...S.authors.values()]
 const matchTopics = q => (q.length < 2 ? [] : TOPICS.filter(t => nameMatches(t, q)).slice(0, 6));
 
 // palakneeti.in only searches Devanagari, so a Roman query is spelled back in Marathi using
-// the words of the articles already loaded ("prem" → प्रेम, "mobile" → मोबाईल).
+// the words of the articles already loaded ("prem" → प्रेम, "mobile" → मोबाईल). Candidates share
+// a consonant skeleton; the closest full spelling wins, and a distant one is no answer at all.
 let vocab = null, vocabSize = 0;
 function vocabulary() {
   if (vocab && vocabSize === S.pool.size) return vocab;
@@ -870,24 +871,38 @@ function vocabulary() {
       if (w.length > 1) counts.set(w, (counts.get(w) || 0) + 1);
     }
   }
-  vocab = new Map(); // skeleton → [commonest word, count]
+  vocab = new Map(); // skeleton → [[word, count], …]
   for (const [w, n] of counts) {
-    const k = skel(latin(w)), cur = vocab.get(k);
-    if (!cur || n > cur[1]) vocab.set(k, [w, n]);
+    const k = skel(latin(w));
+    if (!vocab.has(k)) vocab.set(k, []);
+    vocab.get(k).push([w, n]);
   }
   vocabSize = S.pool.size;
   return vocab;
 }
+const loose = t => t.toLowerCase().replace(/w/g, 'v').replace(/z/g, 'j').replace(/f/g, 'ph').replace(/ee/g, 'i').replace(/oo/g, 'u')
+  .replace(/([aiu])\1+/g, '$1').replace(/y$/, 'i');
+function distance(a, b) {
+  const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+  }
+  return d[b.length];
+}
 function toMarathi(q) {
   const v = vocabulary();
-  return q.split(/\s+/).map(t => {
-    const k = skel(t);
+  const words = q.split(/\s+/).map(t => {
+    const k = skel(t), lt = loose(t);
     if (k.length < 2) return null;
-    if (v.has(k)) return v.get(k)[0];
     let best = null;
-    for (const [key, hit] of v) if (key.startsWith(k) && (!best || hit[1] > best[1])) best = hit;
+    for (const [w, n] of v.get(k) || []) {
+      const dist = distance(lt, loose(latin(w)));
+      if (dist <= Math.max(1, Math.round(lt.length / 3)) && (!best || dist < best[1] || (dist === best[1] && n > best[2]))) best = [w, dist, n];
+    }
     return best && best[0];
-  }).filter(Boolean).join(' ');
+  });
+  return words.every(Boolean) ? words.join(' ') : ''; // every word or nothing: half a phrase searches the wrong thing
 }
 
 const resultRows = list => list.map(a => `<a href="#/a/${a.id}"><span class="st">${esc(a.title)}</span><small class="who">${byline(a)}</small></a>`).join('');
