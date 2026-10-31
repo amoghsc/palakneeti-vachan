@@ -1,5 +1,5 @@
-// Suggests palakneeti.in articles for a reader's own words (Marathi or English).
-// Two small Gemini calls around a live search of palakneeti.in; nothing is stored.
+// Suggests palakneeti.in articles for a reader's own words (Marathi, English or Marathi in
+// English letters). Small Gemini calls around a live search of palakneeti.in; nothing is stored.
 // Plain JS with fetch only, so it runs both in the Supabase Edge Function (Deno)
 // and in the local Node dev server.
 
@@ -11,7 +11,7 @@ const NOT_ARTICLES = '48,3,52,44,602,603,605,43';
 const FALLBACKS = ['gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function gemini(key, model, prompt, schema) {
+async function gemini(key, model, prompt, schema, level = 'minimal') {
   const models = [model, ...FALLBACKS.filter(m => m !== model)];
   let last, thinking = true;
   for (const m of models) {
@@ -22,12 +22,12 @@ async function gemini(key, model, prompt, schema) {
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
-            responseMimeType: 'application/json', responseSchema: schema, temperature: 0.3, maxOutputTokens: 4096,
-            ...(thinking ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
+            responseMimeType: 'application/json', responseSchema: schema, temperature: 0, seed: 11, maxOutputTokens: 4096, // fixed seed: same question, same answer
+            ...(thinking ? { thinkingConfig: { thinkingLevel: level } } : {}),
           },
         }),
       });
-      if (res.status === 400 && thinking) { thinking = false; attempt--; continue; } // model without thinking levels
+      if (res.status === 400 && thinking) { thinking = false; attempt--; continue; } // model without this thinking level
       if (res.ok) {
         const data = await res.json();
         const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
@@ -50,6 +50,11 @@ async function searchSite(query) {
   if (!res.ok) return [];
   return (await res.json()).map(p => ({ id: p.id, title: strip(p.title.rendered), excerpt: strip(p.excerpt.rendered).slice(0, 220), date: p.date }));
 }
+
+// Step 0 rewrites every question in plain Devanagari Marathi, so the same question typed in
+// Marathi, English or Marathi-in-English letters reaches the search step as the same text.
+const ASKED_SCHEMA = { type: 'OBJECT', properties: { marathi: { type: 'STRING' } }, required: ['marathi'] };
+const tidy = s => String(s || '').normalize('NFC').replace(/[\s।.!?,;:]+$/u, '').replace(/\s+/g, ' ').trim();
 
 const TERMS_SCHEMA = {
   type: 'OBJECT',
@@ -77,10 +82,17 @@ export async function suggest(text, { key, model }) {
   if (text.length < 8) throw Object.assign(new Error('too-short'), { status: 400 });
   if (text.length > 3000) text = text.slice(0, 3000);
 
+  // 0. whatever the script → one plain Devanagari Marathi sentence
+  const norm = await gemini(key, model, `खालचा मजकूर मराठीत, इंग्रजीत किंवा इंग्रजी अक्षरांत लिहिलेल्या मराठीत आहे
+(उदा. 'malaa premaawishayii lekh suchaw' = 'मला प्रेमाविषयी लेख सुचव'; 'maza mulga mobile sodat nahi' = 'माझा मुलगा मोबाईल सोडत नाही').
+तो साध्या, प्रमाण देवनागरी मराठीत "marathi" मध्ये लिहा. अर्थ, शब्दक्रम आणि क्रियापदाचे रूप शक्य तितके तसेच ठेवा; काहीही वाढवू नका, स्पष्टीकरण देऊ नका.
+मजकूर: <<<${text}>>>`, ASKED_SCHEMA);
+  const asked = tidy(norm.marathi) || tidy(text);
+
   // 1. the reader's situation → Marathi search phrases
   const terms = await gemini(key, model, `तुम्ही 'पालकनीती' या पालकत्वावरील मराठी मासिकाच्या वाचकांना मदत करता.
-एका वाचकाने आपली परिस्थिती लिहिली आहे (मराठी किंवा इंग्रजीत):
-<<<${text}>>>
+एका वाचकाने आपली परिस्थिती लिहिली आहे:
+<<<${asked}>>>
 
 हे करा:
 1. "queries": पालकनीतीच्या मराठी लेखांमध्ये सापडतील असे ८ ते १० मराठी शोध-शब्द. बहुतेक दोन शब्दांचे जोड असावेत जे एकाच लेखात एकत्र येतील (उदा. 'शाळेची भीती', 'मोबाईल राग', 'किशोरवयीन संवाद', 'मुलांना शिक्षा'), दोन-तीन एक शब्दाचे चालतील. लेखांत प्रत्यक्ष वापरले जाणारे साधे शब्द निवडा. इंग्रजी नको.
@@ -93,22 +105,22 @@ export async function suggest(text, { key, model }) {
   const candidates = [];
   for (const c of found) if (!candidates.some(x => x.id === c.id)) candidates.push(c);
   const pool = candidates.slice(0, 45);
-  if (!pool.length) return { note: terms.note, urgent: !!terms.urgent, queries, picks: [] };
+  if (!pool.length) return { asked, note: terms.note, urgent: !!terms.urgent, queries, picks: [] };
 
   // 3. pick the articles that would genuinely help, with a one-line reason each
   const list = pool.map(c => `[${c.id}] ${c.title} — ${c.excerpt}`).join('\n');
   const ranked = await gemini(key, model, `वाचकाची परिस्थिती:
-<<<${text}>>>
+<<<${asked}>>>
 
 पालकनीतीचे हे लेख सापडले आहेत (प्रत्येकापुढे [id], शीर्षक आणि सुरुवात):
 ${list}
 
 या वाचकाला उपयोगी पडतील असे ४ ते ६ लेख निवडा, सर्वात उपयोगी आधी. फक्त वरच्या यादीतले id वापरा.
 प्रत्येकासाठी "reason": हा लेख त्यांना का उपयोगी पडेल हे सांगणारे एक साधे मराठी वाक्य (जास्तीत जास्त २० शब्द, 'तुम्ही' वापरून, उपदेश न करता).
-जे लेख त्यांच्या परिस्थितीशी थेट किंवा जवळून जोडलेले आहेत तेच निवडा; अगदीच संबंध नसेल तर कमी लेख चालतील.`, PICKS_SCHEMA);
+आधी परिस्थितीशी थेट जोडलेले लेख घ्या. ते ४ पेक्षा कमी असतील तर त्याच प्रश्नाच्या जवळच्या पैलूंवरचे (नाती, संवाद, भावना, सवयी) लेखही घ्या, पण असंबंधित लेख घेऊ नका.`, PICKS_SCHEMA);
 
   const byId = new Map(pool.map(c => [c.id, c]));
   const picks = (ranked.picks || []).filter(p => byId.has(p.id)).slice(0, 6)
     .map(p => ({ ...byId.get(p.id), reason: String(p.reason || '').trim() }));
-  return { note: terms.note, urgent: !!terms.urgent, queries, picks };
+  return { asked, note: terms.note, urgent: !!terms.urgent, queries, picks };
 }

@@ -570,3 +570,21 @@ body.searching .search { max-height: none; overflow: visible; }
 .search-results a { flex-direction: column; justify-content: flex-start; gap: 4px; }
 .search-results small, .ai-picks .who { white-space: normal; font-family: var(--ui); font-size: 14.5px; color: var(--ink-2); }
 .ai-picks .who:empty { display: none; }
+
+/* ---------- v10: search modes (शब्द शोध / लेख सुचवा) ---------- */
+.search-modes { display: inline-flex; border: 1px solid var(--rule); margin-bottom: 14px; font-family: var(--ui); }
+.search-modes button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; font-size: 15px; color: var(--ink-2); transition: background .2s, color .2s; }
+.search-modes button + button { border-left: 1px solid var(--rule); }
+.search-modes button:hover { background: var(--hl); }
+.search-modes button.on { background: var(--ink); color: var(--paper); }
+.search-modes svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.find-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.find-chips .fc-l { font-family: var(--ui); font-size: 13px; color: var(--ink-3); min-width: 3.5em; }
+.search-results a.chip { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; padding: 3px 12px 3px 4px; border: 1px solid var(--rule); font-family: var(--ui); font-size: 15px; transition: background .2s; }
+.search-results a.chip:not(:has(.av)) { padding-left: 12px; }
+.search-results a.chip:hover { background: var(--hl); color: var(--accent); }
+.find-h { font-family: var(--ui); font-size: 13px; font-weight: 500; color: var(--ink-3); margin: 18px 0 0; letter-spacing: .02em; }
+.find-note, .ai-asked { font-family: var(--ui); font-size: 13.5px; color: var(--ink-3); margin: 10px 0 0; }
+.ai-asked { margin: 0 0 8px; }
+.search-results .ai-wait { margin: 12px 0; font-size: 14px; }
+.search-results a.chip .av { --s: 1.6em; font-size: .8em; }

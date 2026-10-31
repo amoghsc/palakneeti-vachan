@@ -285,6 +285,15 @@ export async function fetchFiltered({ year, month, authorKey, topic, page = 1 })
   return { articles, total };
 }
 
+// Keyword search inside every article on palakneeti.in (title and full text), best matches first.
+export async function searchSite(q, perPage = 12) {
+  const params = new URLSearchParams({ search: q, orderby: 'relevance', categories: CAT_MASIK_ARTICLE, per_page: perPage,
+    _embed: 'wp:featuredmedia,wp:term', _fields: FIELDS });
+  const res = await fetch(`${API}?${params}`);
+  if (!res.ok) throw new Error(`palakneeti.in replied ${res.status}`);
+  return { articles: (await res.json()).map(p => parse(p, true)).filter(Boolean), total: +res.headers.get('X-WP-Total') || 0 };
+}
+
 /* ---------- printed issues (मासिक) ---------- */
 const CAT_MASIK_MONTHLY = 48;
 // site-structure categories; whatever category is left on an issue is its month

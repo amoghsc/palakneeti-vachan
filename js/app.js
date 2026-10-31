@@ -1,4 +1,4 @@
-import { fetchArticles, fetchArticle, fetchByAuthor, fetchFiltered, fetchGhIssue, fetchGhIssues, fetchIssue, fetchIssues, findPhoto, latin, resolveIssue, skel } from './source.js';
+import { fetchArticles, fetchArticle, fetchByAuthor, fetchFiltered, fetchGhIssue, fetchGhIssues, fetchIssue, fetchIssues, findPhoto, latin, resolveIssue, searchSite, skel, TOPICS } from './source.js';
 import { SUPABASE_URL, SUPABASE_ANON, track, trackView, trackSearch } from './track.js';
 import { relate, mr, readMins, mrDate, firstGrapheme } from './text.js';
 import { applyDesign, mountSettings, setReadSize, readSize, READ_SIZES, clearColors } from './settings.js';
@@ -775,8 +775,10 @@ function drawGraph(on, focusId) {
 const hashId = s => { let h = 7; for (const c of s) h = (h * 31 + c.codePointAt(0)) | 0; return Math.abs(h); };
 /* ---------- search: Devanagari or English spelling ---------- */
 const $search = $('#search'), $q = $('#q'), $results = $('#results');
+const $ai = $('#aiResults'), $aiBtn = $('#aiBtn');
 function closeSearch() {
-  $search.hidden = true; $q.value = ''; $results.innerHTML = ''; $('#aiResults').innerHTML = '';
+  clearTimeout(findTimer); findRun++; aiRun++;
+  $search.hidden = true; $q.value = ''; $results.innerHTML = ''; $ai.innerHTML = '';
   $('#searchBtn').classList.remove('on'); focusResults();
 }
 $('#searchBtn').onclick = () => {
@@ -790,9 +792,38 @@ function byline(a) {
 }
 // While results are showing, the page underneath steps aside so only the list is seen.
 function focusResults() {
-  const on = !$search.hidden && !!($results.innerHTML.trim() || $('#aiResults').innerHTML.trim());
+  const on = !$search.hidden && !!($results.innerHTML.trim() || $ai.innerHTML.trim());
   document.body.classList.toggle('searching', on);
 }
+const script = t => (/[a-z]/i.test(t) ? 'latin' : 'devanagari');
+
+/* Two separate tools share the box: शब्द शोध finds titles, authors, subjects and words inside
+   articles; लेख सुचवा asks the AI about the reader's own situation. */
+const MODES = {
+  find: 'लेखक, विषय, शीर्षक किंवा लेखातला शब्द… (मराठी किंवा English अक्षरांत)',
+  suggest: 'तुमचा प्रश्न किंवा परिस्थिती लिहा… उदा. माझा मुलगा मोबाईल सोडत नाही',
+};
+let mode = pref('search-mode', 'find') === 'suggest' ? 'suggest' : 'find';
+function setMode(m, byReader) {
+  mode = m; setPref('search-mode', m);
+  $search.dataset.mode = m;
+  $search.querySelectorAll('.search-modes button').forEach(b => {
+    const on = b.dataset.m === m; b.classList.toggle('on', on); b.setAttribute('aria-selected', on);
+  });
+  $q.placeholder = MODES[m];
+  $('#aiRow').hidden = m !== 'suggest';
+  clearTimeout(findTimer); findRun++; aiRun++;
+  $results.innerHTML = ''; $ai.innerHTML = '';
+  $aiBtn.disabled = $q.value.trim().length < 8;
+  growQ();
+  if (m === 'find') runFind();
+  if (byReader) { track('mode', { label: m }); $q.focus(); }
+  focusResults();
+}
+$search.querySelector('.search-modes').onclick = e => {
+  const b = e.target.closest('button');
+  if (b && b.dataset.m !== mode) setMode(b.dataset.m, true);
+};
 
 // Each article's words as consonant skeletons of their Latin spelling, so
 // "paranjape" finds परांजपे and "palakatva" / "palaktva" find पालकत्व.
@@ -817,17 +848,92 @@ function score(a, q) {
   if (!ks.length || !ks.every(k => h.sk.some(t => t.startsWith(k)))) return 0;
   return ks.every(k => h.title.some(t => t.startsWith(k))) ? 2 : 1;
 }
-$q.addEventListener('input', () => {
+// Roman letters match names by consonant skeleton, so "anagha" finds अनघा.
+const romanKeys = q => q.split(/\s+/).map(skel).filter(k => k.length > 1);
+function nameMatches(name, q) {
+  if (script(q) === 'devanagari') return name.toLowerCase().includes(q);
+  const ks = romanKeys(q), ws = name.split(/\s+/).map(w => skel(latin(w)));
+  return ks.length > 0 && ks.every(k => ws.some(w => w.startsWith(k)));
+}
+const matchAuthors = q => (q.length < 2 ? [] : [...S.authors.values()]
+  .filter(au => au.name !== 'पालकनीती' && nameMatches(au.name, q)).slice(0, 6));
+const matchTopics = q => (q.length < 2 ? [] : TOPICS.filter(t => nameMatches(t, q)).slice(0, 6));
+
+// palakneeti.in only searches Devanagari, so a Roman query is spelled back in Marathi using
+// the words of the articles already loaded ("prem" → प्रेम, "mobile" → मोबाईल).
+let vocab = null, vocabSize = 0;
+function vocabulary() {
+  if (vocab && vocabSize === S.pool.size) return vocab;
+  const counts = new Map();
+  for (const a of S.pool.values()) {
+    for (const w of `${a.title} ${a.author} ${a.topics.join(' ')} ${a.text}`.split(/[^\u0900-\u097F]+/)) {
+      if (w.length > 1) counts.set(w, (counts.get(w) || 0) + 1);
+    }
+  }
+  vocab = new Map(); // skeleton → [commonest word, count]
+  for (const [w, n] of counts) {
+    const k = skel(latin(w)), cur = vocab.get(k);
+    if (!cur || n > cur[1]) vocab.set(k, [w, n]);
+  }
+  vocabSize = S.pool.size;
+  return vocab;
+}
+function toMarathi(q) {
+  const v = vocabulary();
+  return q.split(/\s+/).map(t => {
+    const k = skel(t);
+    if (k.length < 2) return null;
+    if (v.has(k)) return v.get(k)[0];
+    let best = null;
+    for (const [key, hit] of v) if (key.startsWith(k) && (!best || hit[1] > best[1])) best = hit;
+    return best && best[0];
+  }).filter(Boolean).join(' ');
+}
+
+const resultRows = list => list.map(a => `<a href="#/a/${a.id}"><span class="st">${esc(a.title)}</span><small class="who">${byline(a)}</small></a>`).join('');
+function paintFind({ q, local, people, subjects, word, site, pending }) {
+  const chips = (label, items) => (items.length ? `<div class="find-chips"><span class="fc-l">${label}</span>${items.join('')}</div>` : '');
+  const nothing = !local.length && !people.length && !subjects.length && !pending && !(site && site.length);
+  const note = script(q) === 'latin' && q.length > 1
+    ? (word ? `<p class="find-note">लेखांच्या मजकुरात ‘${esc(word)}’ असे शोधले.</p>` : '<p class="find-note">लेखांतले शब्द शोधायला मराठीत लिहून पाहा.</p>')
+    : '';
+  $results.innerHTML = `${note}
+    ${chips('लेखक', people.map(au => `<a class="chip" href="${authorHref(au.key)}">${portrait(au.key, au.name)}<span>${esc(au.name)}</span></a>`))}
+    ${chips('विषय', subjects.map(t => `<a class="chip" href="${topicHref(t)}">${esc(t)}</a>`))}
+    ${resultRows(local)}
+    ${site && site.length ? `<h3 class="find-h">लेखांच्या मजकुरात सापडलेले</h3>${resultRows(site)}` : ''}
+    ${pending ? '<p class="ai-wait"><span class="dotty"></span>लेखांमध्ये शोधत आहोत…</p>' : ''}
+    ${nothing ? '<p class="meta">काही सापडलं नाही.</p>' : ''}`;
+  focusResults();
+}
+
+// Instant matches from what is loaded, then a live search of every article on palakneeti.in.
+let findRun = 0, findTimer;
+function runFind(now = false) {
+  clearTimeout(findTimer);
+  const run = ++findRun;
   const q = $q.value.trim().toLowerCase();
   if (!q) { $results.innerHTML = ''; return focusResults(); }
-  const hits = [...S.pool.values()].map(a => [a, score(a, q)]).filter(([, s]) => s)
+  const word = q.length < 2 ? '' : script(q) === 'latin' ? toMarathi(q) : q;
+  // a Roman query that has a Marathi spelling is searched exactly as that spelling would be
+  const mq = word || q;
+  const local = [...S.pool.values()].map(a => [a, score(a, mq)]).filter(([, s]) => s)
     .sort((x, y) => y[1] - x[1] || y[0].date - x[0].date).slice(0, 8).map(([a]) => a);
-  $results.innerHTML = hits.length
-    ? hits.map(a => `<a href="#/a/${a.id}"><span class="st">${esc(a.title)}</span><small class="who">${byline(a)}</small></a>`).join('')
-    : `<p class="meta">काही सापडलं नाही.</p>`;
-  trackSearch(q, hits.length);
-  focusResults();
-});
+  const both = (fn, key) => [...new Map([...fn(q), ...(word && word !== q ? fn(word) : [])].map(x => [key(x), x])).values()].slice(0, 6);
+  const people = both(matchAuthors, au => au.key), subjects = both(matchTopics, t => t);
+  paintFind({ q, local, people, subjects, word, site: null, pending: !!word });
+  if (!word) return trackSearch(q, local.length, script(q));
+  findTimer = setTimeout(async () => {
+    let site = [];
+    try { ({ articles: site } = await searchSite(word)); } catch {}
+    if (run !== findRun) return;
+    const fresh = site.filter(a => !S.pool.has(a.id));
+    if (fresh.length) { addToPool(fresh); rebuild(); }
+    site = site.map(a => S.pool.get(a.id)).filter(a => a && !local.includes(a));
+    paintFind({ q, local, people, subjects, word, site, pending: false });
+    trackSearch(q, local.length + site.length, script(q));
+  }, now ? 0 : 450);
+}
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$search.hidden) closeSearch(); });
 
 /* ---------- AI: articles for the reader's own situation ---------- */
@@ -836,7 +942,6 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && !$search.hidden) cl
 const AI_LOCAL = new URLSearchParams(location.search).get('ai') === 'local';
 const AI_URL = AI_LOCAL ? 'http://127.0.0.1:5203/' : `${SUPABASE_URL}/functions/v1/pk-suggest`;
 const AI_HEADERS = AI_LOCAL ? {} : { authorization: `Bearer ${SUPABASE_ANON}`, apikey: SUPABASE_ANON };
-const $ai = $('#aiResults'), $aiBtn = $('#aiBtn');
 // Grow with the text; when empty, size to the placeholder so the hint is never clipped.
 function growQ() {
   $q.style.height = 'auto';
@@ -849,10 +954,18 @@ function growQ() {
   $q.style.height = Math.min(220, h) + ($q.offsetHeight - $q.clientHeight) + 'px'; // border-box: add the rule line
 }
 addEventListener('resize', () => { if (!$search.hidden) growQ(); });
-$q.addEventListener('input', () => { growQ(); $aiBtn.disabled = $q.value.trim().length < 8; });
+$q.addEventListener('input', () => {
+  growQ();
+  if (mode === 'find') return runFind();
+  $aiBtn.disabled = $q.value.trim().length < 8;
+  if (!$q.value.trim()) { $ai.innerHTML = ''; focusResults(); }
+});
+// Enter searches (Shift+Enter starts a new line when describing a situation).
 $q.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (!$aiBtn.disabled) askAI(); }
-  else if (e.key === 'Enter' && !e.shiftKey && $q.value.length < 60) e.preventDefault(); // short queries stay one line
+  if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+  e.preventDefault();
+  if (mode === 'find') runFind(true);
+  else if (!$aiBtn.disabled) askAI();
 });
 $aiBtn.onclick = askAI;
 
@@ -882,10 +995,11 @@ async function askAI() {
     const res = await fetch(AI_URL, { method: 'POST', headers: { 'content-type': 'application/json', ...AI_HEADERS }, body: JSON.stringify({ text }) });
     const out = await res.json().catch(() => ({}));
     if (run !== aiRun) return;
-    track('ai', { n: res.ok ? (out.picks || []).length : -1 });
+    track('ai', { n: res.ok ? (out.picks || []).length : -1, label: script(text) });
     if (!res.ok) throw Object.assign(new Error(out.error || 'failed'), { status: res.status });
     $ai.innerHTML = `
       ${out.urgent ? `<p class="ai-urgent">तुम्ही किंवा तुमच्या जवळचं कोणी धोक्यात असल्यास कृपया लगेच मदत घ्या: <b>टेली-मानस हेल्पलाइन १४४१६</b> (२४ तास, विनामूल्य) किंवा आपत्कालीन क्रमांक <b>११२</b>.</p>` : ''}
+      ${out.asked && script(text) === 'latin' ? `<p class="ai-asked">समजलेला प्रश्न: ${esc(out.asked)}</p>` : ''}
       ${out.note ? `<p class="ai-note">${esc(out.note)}</p>` : ''}
       ${out.picks && out.picks.length ? `<ol class="ai-picks">${out.picks.map(p => `<li><a href="#/a/${p.id}">
           <span class="t">${esc(p.title)}</span><small class="who" data-au="${p.id}"></small><span class="r">${esc(p.reason)}</span></a></li>`).join('')}</ol>`
@@ -902,6 +1016,8 @@ async function askAI() {
     if (run === aiRun) $aiBtn.disabled = $q.value.trim().length < 8;
   }
 }
+
+setMode(mode);
 
 /* ---------- theme: day → sepia → night ---------- */
 const THEMES = ['light', 'sepia', 'dark'];

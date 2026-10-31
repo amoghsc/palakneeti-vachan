@@ -24,6 +24,12 @@ The design panel is hidden: add `?tune` to the address (e.g. `/?tune#/`) or pres
 
 ## Usage stats
 
+Search has two tabs: **शब्द शोध** (titles, authors, subjects, and words inside articles via
+palakneeti.in's own search; Roman-letter queries are spelled back in Marathi from the loaded
+articles' words) and **लेख सुचवा** (the AI function; it first rewrites any input as Devanagari
+Marathi, with temperature 0 and a fixed seed, so the same question in either script gets the
+same picks).
+
 `js/track.js` counts page views, searches, AI suggestions and a few clicks into the
 `pk_events` table on Supabase (insert-only for visitors). Each browser gets a random id in
 localStorage; no IP, name or AI text is stored. Local copies don't count unless the address

@@ -42,12 +42,14 @@ export function trackView(section, ref) {
   })();
 }
 
-// Plain searches are counted once the reader pauses typing.
-let searchTimer;
-export function trackSearch(q, hits) {
+// Keyword searches are counted once the reader pauses typing; label = 'devanagari' or 'latin'.
+// The same words again (e.g. after switching tabs and back) are not counted twice.
+let searchTimer, lastSearch = '';
+export function trackSearch(q, hits, script) {
   clearTimeout(searchTimer);
-  if (q.trim().length < 2) return;
-  searchTimer = setTimeout(() => track('search', { q: q.trim().toLowerCase(), n: hits }), 1500);
+  q = q.trim().toLowerCase();
+  if (q.length < 2 || q === lastSearch) return;
+  searchTimer = setTimeout(() => { lastSearch = q; track('search', { q, n: hits, label: script }); }, 1500);
 }
 
 // Clicks on things worth counting, wherever they are on the page.

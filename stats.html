@@ -81,8 +81,10 @@
 
     const SECTION = { home: 'मुखपृष्ठ', article: 'लेख', masik: 'मासिक (सर्व अंक)', issue: 'एक अंक', authors: 'लेखक (यादी)', author: 'एक लेखक',
       topics: 'विषय', topic: 'एक विषय', graph: 'जाळं' };
-    const FEATURE = { pdf: 'PDF डाउनलोड', view_toggle: 'अनुक्रम दृश्य', theme: 'रंगसंगती', font: 'अक्षराचा आकार' };
-    const FLABEL = { list: 'यादी', cards: 'कार्ड', light: 'दिवस', sepia: 'सेपिया', dark: 'रात्र', bigger: 'मोठे', smaller: 'लहान' };
+    const FEATURE = { pdf: 'PDF डाउनलोड', view_toggle: 'अनुक्रम दृश्य', theme: 'रंगसंगती', font: 'अक्षराचा आकार', mode: 'शोधात निवडलेला प्रकार' };
+    const FLABEL = { list: 'यादी', cards: 'कार्ड', light: 'दिवस', sepia: 'सेपिया', dark: 'रात्र', bigger: 'मोठे', smaller: 'लहान', find: 'शब्द शोध', suggest: 'लेख सुचवा' };
+    const TOOL = { search: 'शब्द शोध', ai: 'लेख सुचवा (AI)' };
+    const SCRIPT = { devanagari: 'मराठी (देवनागरी)', latin: 'English अक्षरांत', unknown: 'माहिती नाही' };
 
     function login(msg = '') {
       $app.className = '';
@@ -162,8 +164,8 @@
           <div class="tile"><b>${num(s.visitors)}</b><span>वाचक</span><em>${num(s.new_visitors)} नवे</em></div>
           <div class="tile"><b>${num(s.sessions)}</b><span>भेटी</span><em>प्रति वाचक ${s.visitors ? mr((s.sessions / s.visitors).toFixed(1)) : '—'}</em></div>
           <div class="tile"><b>${num(s.views)}</b><span>पाने उघडली</span><em>प्रति भेट ${s.sessions ? mr((s.views / s.sessions).toFixed(1)) : '—'}</em></div>
-          <div class="tile"><b>${num(s.searches)}</b><span>शोध</span><em>${num(s.search_clicks)} वेळा निकाल उघडला</em></div>
-          <div class="tile"><b>${num(s.ai)}</b><span>AI सुचवण्या</span><em>${share(s.ai_ok, s.ai)} मध्ये लेख मिळाले · ${num(s.ai_clicks)} उघडले</em></div>
+          <div class="tile"><b>${num(s.searches)}</b><span>शब्द शोध</span><em>${num(s.search_visitors)} वाचक · ${num(s.search_clicks)} निकाल उघडले · ${num(s.search_empty)} वेळा काही नाही</em></div>
+          <div class="tile"><b>${num(s.ai)}</b><span>लेख सुचवा (AI)</span><em>${num(s.ai_visitors)} वाचक · ${share(s.ai_ok, s.ai)} मध्ये लेख मिळाले · ${num(s.ai_clicks)} उघडले</em></div>
           <div class="tile"><b>${num(s.pdf)}</b><span>PDF डाउनलोड</span></div>
         </div>
         <section class="box chart"><h2>रोजचे वाचक</h2>${dailyChart(s.daily)}</section>
@@ -175,8 +177,11 @@
         <section class="box"><h2>सर्वाधिक वाचलेले लेख <small>पाने · वाचक</small></h2>
           ${table(s.articles, { bar: 'views', nums: ['views', 'visitors'], name: r => `<a href="${SITE}#/a/${esc(r.ref)}" target="_blank">${esc(r.title || '#' + r.ref)}</a>` })}</section>
         <div class="grid2">
-          <section class="box"><h2>शोधलेले शब्द <small>किती वेळा</small></h2>
-            ${table(s.queries, { bar: 'times', nums: ['times'], name: r => `${esc(r.q)}${r.fewest === 0 ? '<span class="zero">काही सापडलं नाही</span>' : ''}` })}</section>
+          <section class="box"><h2>शब्द शोधात शोधलेले शब्द <small>किती वेळा</small></h2>
+            ${table(s.queries, { bar: 'times', nums: ['times'], name: r => `${esc(r.q)}${r.fewest === 0 ? '<span class="zero">काही सापडलं नाही</span>' : ''}` })}
+            <h2 style="margin-top:18px">शोधाची लिपी <small>किती वेळा</small></h2>
+            ${table(s.scripts || [], { bar: 'times', nums: ['times'], name: r => `${TOOL[r.kind]} — ${SCRIPT[r.script] || r.script}` })}
+            <p class="empty" style="font-size:12.5px">लेख सुचवा (AI) साठी लिहिलेला मजकूर साठवला जात नाही; फक्त किती वेळा आणि कोणत्या लिपीत ते मोजले जाते.</p></section>
           <div>
             <section class="box"><h2>अंक</h2>
               ${table(s.issues, { bar: 'views', nums: ['views'], name: r => `<a href="${SITE}#/masik/${esc(r.ref)}" target="_blank">${esc(r.title || r.ref)}</a>` })}</section>
@@ -198,7 +203,7 @@
       $app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); login(); };
       $app.querySelectorAll('.chart .hit').forEach(r => {
         r.onmousemove = e => { const d = s.daily[+r.dataset.i];
-          $tip.textContent = `${new Date(d.day).toLocaleDateString('mr-IN', { day: 'numeric', month: 'short' })}: ${num(d.visitors)} वाचक · ${num(d.views)} पाने · ${num(d.searches)} शोध`;
+          $tip.textContent = `${new Date(d.day).toLocaleDateString('mr-IN', { day: 'numeric', month: 'short' })}: ${num(d.visitors)} वाचक · ${num(d.views)} पाने · ${num(d.searches)} शब्द शोध · ${num(d.ai || 0)} लेख सुचवा`;
           $tip.style.display = 'block'; $tip.style.left = Math.min(e.clientX + 12, innerWidth - 260) + 'px'; $tip.style.top = e.clientY + 14 + 'px'; };
         r.onmouseleave = () => { $tip.style.display = 'none'; };
       });
@@ -208,14 +213,15 @@
     if (location.hostname === 'localhost' && new URLSearchParams(location.search).has('demo')) {
       const day = i => new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
       const daily = Array.from({ length: 30 }, (_, i) => { const v = 20 + Math.round(15 * Math.sin(i / 3) + i); return { day: day(29 - i), visitors: v, views: v * 3, searches: Math.round(v / 4) }; });
-      render({ visitors: 412, new_visitors: 300, sessions: 690, views: 2480, searches: 210, search_clicks: 120, ai: 64, ai_ok: 58, ai_clicks: 71, pdf: 33, daily,
+      render({ visitors: 412, new_visitors: 300, sessions: 690, views: 2480, searches: 210, search_visitors: 150, search_empty: 18, search_clicks: 120, ai: 64, ai_visitors: 40, ai_ok: 58, ai_clicks: 71, pdf: 33, daily,
+        scripts: [{ kind: 'search', script: 'devanagari', times: 140 }, { kind: 'search', script: 'latin', times: 70 }, { kind: 'ai', script: 'devanagari', times: 30 }, { kind: 'ai', script: 'latin', times: 34 }],
         hours: Array.from({ length: 24 }, (_, h) => ({ hour: h, views: Math.round(60 + 50 * Math.sin((h - 6) / 4)) })),
         sections: [{ section: 'article', views: 1300, visitors: 300 }, { section: 'home', views: 600, visitors: 380 }, { section: 'masik', views: 240, visitors: 120 }, { section: 'issue', views: 200, visitors: 90 }],
         articles: [{ ref: '27644', title: 'मरण', views: 90, visitors: 70 }, { ref: '21920', title: 'अभ्यासात मागे', views: 60, visitors: 52 }],
         issues: [{ ref: '27650', title: 'ऑगस्ट २०२५', views: 40 }], authors: [{ ref: 'x', name: 'वैशाली गेडाम', views: 12 }],
         queries: [{ q: 'palak', times: 14, fewest: 8 }, { q: 'zzqx', times: 2, fewest: 0 }],
         devices: [{ device: 'mobile', visitors: 300 }, { device: 'desktop', visitors: 112 }], referrers: [{ referrer: 'l.facebook.com', sessions: 40 }],
-        features: [{ kind: 'pdf', label: 'ऑगस्ट २०२५', times: 12 }, { kind: 'theme', label: 'dark', times: 9 }] }, 'demo@local');
+        features: [{ kind: 'pdf', label: 'ऑगस्ट २०२५', times: 12 }, { kind: 'mode', label: 'suggest', times: 30 }, { kind: 'mode', label: 'find', times: 8 }, { kind: 'theme', label: 'dark', times: 9 }] }, 'demo@local');
     } else load();
   </script>
 </body>

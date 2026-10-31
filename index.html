@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Devanagari:wght@200..700&family=Tiro+Devanagari+Marathi:ital@0;1&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Mukta:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=stats1">
+  <link rel="stylesheet" href="css/style.css?v=modes2">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='10' fill='%23f6f2ea'/><text x='32' y='45' font-size='36' text-anchor='middle' fill='%237a3e2e' font-family='serif'>प</text></svg>">
 </head>
 <body>
@@ -32,9 +32,13 @@
         <button class="txt-btn" id="theme" type="button" title="दिवस · पिवळसर · रात्र">◐</button>
       </div>
     </div>
-    <div class="search" id="search" hidden>
-      <textarea id="q" rows="1" placeholder="शीर्षक, लेखक किंवा विषय शोधा… किंवा तुमची परिस्थिती लिहा आणि लेख सुचवायला सांगा" autocomplete="off"></textarea>
-      <div class="ai-row">
+    <div class="search" id="search" data-mode="find" hidden>
+      <div class="search-modes" role="tablist" aria-label="शोधाचा प्रकार">
+        <button type="button" role="tab" data-m="find" class="on" aria-selected="true"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.6 12.6 17 17"/></svg>शब्द शोध</button>
+        <button type="button" role="tab" data-m="suggest" aria-selected="false"><span aria-hidden="true">✦</span>लेख सुचवा</button>
+      </div>
+      <textarea id="q" rows="1" placeholder="लेखक, विषय, शीर्षक किंवा लेखातला शब्द… (मराठी किंवा English अक्षरांत)" autocomplete="off" spellcheck="false"></textarea>
+      <div class="ai-row" id="aiRow" hidden>
         <button class="ai-btn" id="aiBtn" type="button" disabled>✦ माझ्यासाठी लेख सुचवा</button>
         <span class="ai-hint">AI वापरून. तुम्ही लिहिलेला मजकूर उत्तरासाठी Google च्या AI कडे पाठवला जातो; तो इथे साठवला जात नाही.</span>
       </div>
@@ -52,6 +56,6 @@
   </footer>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-  <script type="module" src="js/app.js?v=stats1"></script>
+  <script type="module" src="js/app.js?v=modes2"></script>
 </body>
 </html>
